@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: kvm-server
+data:
+  MYSQL_DATABASE: "kvm_db"
+  MYSQL_USER: "kvm_user"

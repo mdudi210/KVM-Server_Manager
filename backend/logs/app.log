@@ -1,0 +1,6 @@
+[2026-01-12 19:37:23] [ERROR] login endpoint: Unexpected error in login API
+Traceback (most recent call last):
+  File "/Users/manishdudi/Desktop/KVM-Server-Manager/backend/src/services/login.py", line 21, in login
+    cursor.execute(
+    ^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'execute'

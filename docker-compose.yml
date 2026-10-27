@@ -1,0 +1,90 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: kvm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-kvm_db}
+      MYSQL_USER: ${DB_USER:-kvm_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-kvm_password}
+    # Keep MySQL internal to Docker network (safer default).
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - kvm-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kvm-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_USER: ${DB_USER:-kvm_user}
+      DB_PASSWORD: ${DB_PASSWORD:-kvm_password}
+      DB_DATABASE: ${DB_DATABASE:-kvm_db}
+      AUTHJWT_SECRET_KEY: ${AUTHJWT_SECRET_KEY:-change-this-secret}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      SSH_HOSTNAME: ${SSH_HOSTNAME:-10.168.12.248}
+      SSH_USERNAME: ${SSH_USERNAME:-root}
+      SSH_PASSWORD: ${SSH_PASSWORD:-Adm1n0n7y}
+      LINUX_TEMPLATE: ${LINUX_TEMPLATE:-linux-template}
+      WIN_TEMPLATE: ${WIN_TEMPLATE:-windows-template}
+      LINUX_ISO: ${LINUX_ISO:-/home/iso-share/CentOS-Stream-9-latest-x86_64-dvd1.iso}
+      WIN_ISO: ${WIN_ISO:-/home/iso-share/Win11_22H2_English_x64v2.iso}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://localhost,https://127.0.0.1,http://localhost,http://127.0.0.1}
+      RETURN_TOKEN_IN_BODY: ${RETURN_TOKEN_IN_BODY:-false}
+      AUTHJWT_COOKIE_SECURE: ${AUTHJWT_COOKIE_SECURE:-true}
+      AUTHJWT_COOKIE_SAMESITE: ${AUTHJWT_COOKIE_SAMESITE:-lax}
+      AUTHJWT_COOKIE_CSRF_PROTECT: ${AUTHJWT_COOKIE_CSRF_PROTECT:-false}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - kvm-network
+    command: >
+      sh -c "python -m backend.db_setup && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: kvm-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=production
+    networks:
+      - kvm-network
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: kvm-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - kvm-network
+
+networks:
+  kvm-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

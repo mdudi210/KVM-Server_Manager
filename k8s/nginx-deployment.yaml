@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: kvm-server
+  labels:
+    app: nginx
+spec:
+  replicas: 2  # Scale as needed
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: kvm-nginx:latest  # Update with your image registry
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        volumeMounts:
+        - name: nginx-ssl
+          mountPath: /etc/nginx/ssl
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: nginx-ssl
+        secret:
+          secretName: nginx-ssl-secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: kvm-server
+  labels:
+    app: nginx
+spec:
+  type: LoadBalancer  # Use NodePort for bare metal, LoadBalancer for cloud
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 443
+    protocol: TCP
+    name: https
+  selector:
+    app: nginx
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nginx-ssl-secret
+  namespace: kvm-server
+type: Opaque
+data:
+  # These will be base64 encoded SSL certificates
+  # Use: kubectl create secret generic nginx-ssl-secret --from-file=cert.pem=./ssl/cert.pem --from-file=key.pem=./ssl/key.pem -n kvm-server
+  # Or update this file with base64 encoded values:
+  # cert.pem: <base64-encoded-cert>
+  # key.pem: <base64-encoded-key>
